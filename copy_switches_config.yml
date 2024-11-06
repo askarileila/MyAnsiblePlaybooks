@@ -1,0 +1,8 @@
+- name: A playbook to test copying different files on different hosts
+  become: yes
+  hosts: switches
+  tasks:
+    - name: copy config file
+      copy:
+        src: "{{ inventory_hostname}}.cfg"
+        dest: /tmp/
