@@ -1,0 +1,93 @@
+- name: installing splunk
+  hosts: all
+  become: true
+  tasks:
+
+    - name: copy rpm installation package to the host
+      copy:
+        src: /home/user/splunkforwarder-9.0.1-82c987350fde-linux-2.6-x86_64.rpm
+        dest: /root/splunkforwarder-9.0.1-82c987350fde-linux-2.6-x86_64.rpm
+        mode: '0644'
+      when: ansible_facts ['distribution'] == 'CentOS' or  ansible_facts['distribution'] == 'RedHat'
+ 
+    - name: copy deb installation package to the host
+      copy:
+        src: /home/user/splunkforwarder-9.0.1-82c987350fde-linux-2.6-amd64.deb
+        dest: /root/splunkforwarder-9.0.1-82c987350fde-linux-2.6-amd64.deb
+        mode: '0644'
+      when: ansible_facts ['distribution'] == 'Ubuntu' or  ansible_facts['distribution'] == 'Debian'
+
+    - name: copy deployment folder
+      copy:
+        src: /home/user/TA-DeploymentServer.zip
+        dest: /home/TA-DeploymentServer.zip
+
+    - name: create splunkfwd group
+      group:
+        state: present
+        name: splunkfwd
+    
+    - name: create splunkfwd user and add it to adm group
+      user:
+        name: splunkfwd
+        state: present
+        group: splunkfwd
+        create_home: yes
+        append: true
+        groups: adm
+
+    - name: install splunk from rpm package 
+      yum:
+        name: /root/splunkforwarder-9.0.1-82c987350fde-linux-2.6-x86_64.rpm
+        state: present
+        disable_gpg_check: yes
+      when: ansible_facts ['distribution'] == 'CentOS' or  ansible_facts['distribution'] == 'RedHat'
+
+    - name: install splunk from deb package 
+      apt:
+        deb: /root/splunkforwarder-9.0.1-82c987350fde-linux-2.6-amd64.deb
+      when: ansible_facts ['distribution'] == 'Ubuntu' or  ansible_facts['distribution'] == 'Debian'
+
+    - name: create user-seed.conf file and add the content
+      blockinfile:
+        path: /opt/splunkforwarder/etc/system/local/user-seed.conf
+        create: true
+        block: |
+          [user_info]
+          USERNAME = 
+          HASHED_PASSWORD = 
+
+    - name: create server.conf file and add the content
+      blockinfile:
+        path:  /opt/splunkforwarder/etc/system/local/server.conf
+        create: true
+        block: |
+          [kvstore]
+          disabled = true
+
+          [httpServer]
+          disableDefaultPort = true
+
+
+    - name: Installing unzip package to unzip TA-DeploymentServer for Ubuntu 
+      apt:
+        name: unzip
+        state: present
+      when: ansible_facts ['distribution'] in ("Ubuntu", "Debian")
+
+    - name: unzip TA-DeploymentServer
+      command: unzip /home/TA-DeploymentServer.zip
+
+    - name: move TA-DeploymentServer folder
+      command: mv TA-DeploymentServer /opt/splunkforwarder/etc/apps/
+
+    - name: set the owner for splunkforwarder folder
+      command: chown -R splunkfwd:splunkfwd /opt/splunkforwarder
+
+    - name: enable start at boot for splunk
+      command: /opt/splunkforwarder/bin/splunk enable boot-start -user splunkfwd -group splunkfwd --answer-yes --auto-ports --no-prompt --accept-license -systemd-managed 1 -systemd-unit-file-name splunk    
+
+    - name: start Splunk service
+      service:
+        name: splunk
+        state: started
